@@ -44,8 +44,11 @@ for arg in "$@"; do
     ;;
   -c | --cleanup)
     echo "Rebuilding"
-    ZIG_OPTS+=" new"
     CMAKE_BUILD_OPTS+=" --clean-first"
+    ;;
+  -verb)
+    ZIG_OPTS+=" --summary all"
+    ;;
   --vsync)
     echo "Vsync enabled"
     ZIG_CUSTOM_OPTS+=" -Dvsync=1"
@@ -68,6 +71,7 @@ done
 [ -d "assets" ] || mkdir "assets"
 
 echo "Building in $BUILD_MODE mode"
+echo "custom options are: $ZIG_CUSTOM_OPTS"
 
 if [ $BUILD_MODE == "Debug" ]; then
   CMAKE_OPTS+=" -DCMAKE_BUILD_TYPE=Debug"
@@ -79,7 +83,8 @@ if [ $BUILD_MODE == "Debug" ]; then
   fi
   cd "$DEBUG_BUILD_DIR"
   cmake $CMAKE_OPTS ../../ && cmake --build . $CMAKE_BUILD_OPTS
-  zig build $ZIG_OPTS -- -p $DEBUG_BUILD_DIR -Doptimize=$BUILD_MODE $ZIG_CUSTOM_OPTS
+  cd ../../
+  zig build $ZIG_OPTS -Doptimize=$BUILD_MODE -p $DEBUG_BUILD_DIR -- $ZIG_CUSTOM_OPTS
 else
   CMAKE_OPTS+=" -DCMAKE_BUILD_TYPE=Release"
   [ -d "$RELEASE_BUILD_DIR" ] || mkdir "$RELEASE_BUILD_DIR"
@@ -90,5 +95,6 @@ else
   fi
   cd "$RELEASE_BUILD_DIR"
   cmake $CMAKE_OPTS ../../ && cmake --build . $CMAKE_BUILD_OPTS
-  zig build $ZIG_OPTS -- -p $RELEASE_BUILD_DIR -Doptimize=$BUILD_MODE $ZIG_CUSTOM_OPTS
+  cd ../../
+  zig build $ZIG_OPTS -Doptimize=$BUILD_MODE -p $RELEASE_BUILD_DIR -- $ZIG_CUSTOM_OPTS
 fi

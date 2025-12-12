@@ -94,25 +94,6 @@ pub const VulkanDevice = struct {
             create_info.pQueuePriorities = &queue_priorities[i];
         }
 
-        // NOTE: TEMP
-        // const device_features = std.mem.zeroInit(c.VkPhysicalDeviceFeatures, .{
-        //     .samplerAnisotropy = c.VK_TRUE,
-        // });
-
-        // var device_features13 = std.mem.zeroInit(c.VkPhysicalDeviceVulkan13Features, .{
-        //     .sType = c.VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_FEATURES,
-        //     .dynamicRendering = c.VK_TRUE,
-        //     .synchronization2 = c.VK_TRUE,
-        // });
-
-        // var device_features12 = std.mem.zeroInit(c.VkPhysicalDeviceVulkan12Features, .{
-        //     .sType = c.VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES,
-        //     .pNext = &device_features13,
-        //     .bufferDeviceAddress = c.VK_TRUE,
-        //     .descriptorIndexing = c.VK_TRUE,
-        // });
-
-        // NOTE: TEMP
         var device_features: c.VkPhysicalDeviceFeatures = .{
             .samplerAnisotropy = c.VK_TRUE,
         };
@@ -129,7 +110,6 @@ pub const VulkanDevice = struct {
             .bufferDeviceAddress = c.VK_TRUE,
             .descriptorIndexing = c.VK_TRUE,
         };
-        // NOTE: TEMP END
 
         const device_create_info: c.VkDeviceCreateInfo = .{
             .sType = c.VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO,
@@ -143,6 +123,7 @@ pub const VulkanDevice = struct {
 
         // Create the device.
         vk_check(c.vkCreateDevice.?(out_device.physical_device, &device_create_info, null, &out_device.logical_device));
+        c.volkLoadDevice(out_device.logical_device);
 
         // Get queues.
         if (out_device.queue_family_indices.graphics == out_device.queue_family_indices.present) {

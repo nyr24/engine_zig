@@ -74,7 +74,7 @@ pub const VulkanInstance = struct {
         }
 
         vk_check(c.vkCreateInstance.?(&instance_info, null, &self.handle));
-        _ = c.volkLoadInstance(self.handle);
+        _ = c.volkLoadInstanceOnly(self.handle);
 
         if (builtin.mode == .Debug) {
             const log_severity: u32 = c.VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT |
