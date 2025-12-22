@@ -96,6 +96,16 @@ pub fn build(b: *std.Build) void {
     if (b.args) |args| {
         run_cmd.addArgs(args);
     }
+
+    // Tests
+    const test_mod = b.addTest(.{
+        .root_module = root_mod,
+    });
+
+    const run_art_test = b.addRunArtifact(test_mod);
+
+    const test_step = b.step("test", "Run tests");
+    test_step.dependOn(&run_art_test.step);
 }
 
 fn collect_c_sources(b: *std.Build, module: *Module, dir_path: std.Build.LazyPath, allowed_extensions: []const []const u8, recursive: bool) !void {
