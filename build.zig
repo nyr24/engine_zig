@@ -100,6 +100,7 @@ pub fn build(b: *std.Build) void {
     // Tests
     const test_mod = b.addTest(.{
         .root_module = root_mod,
+        .use_llvm = true,
     });
 
     const run_art_test = b.addRunArtifact(test_mod);

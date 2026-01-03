@@ -183,7 +183,27 @@ pub fn FixedArray(comptime T: type, CAPACITY: u32) type {
         }
 
         pub fn print(self: *const Self) void {
-            log_mod.log_debug(.DEBUG, "{any}", .{self.items});
+            log_mod.log_debug(.DEBUG, "{any}", .{self.items[0..self.len]});
         }
     };
+}
+
+test {
+    {
+        var arr: FixedArray(u32, 20) = .init_from_slice(&.{ 1, 2, 3, 4, 5 });
+        try std.testing.expect(arr.len == 5);
+        arr.pop();
+        try std.testing.expect(arr.len == 4);
+        arr.pop_many(3);
+        try std.testing.expect(arr.len == 1);
+        arr.append_many(&.{ 22, 33, 44 });
+        try std.testing.expect(arr.len == 4);
+        arr.remove_unordered(1);
+        try std.testing.expect(arr.len == 3);
+        try std.testing.expect(arr.items[2] == 33);
+        arr.append_many(&.{ 1, 2, 3, 4, 5, 6, 7, 8, 9 });
+        // arr.print();
+        arr.clear();
+        try std.testing.expect(arr.len == 0);
+    }
 }

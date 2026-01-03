@@ -65,3 +65,25 @@ pub fn log_debug(lvl: LogLevel, comptime fmt: []const u8, args: anytype) void {
 pub fn log_error(lvl: LogLevel, comptime fmt: []const u8, args: anytype) void {
     log(lvl, fmt, args);
 }
+
+pub fn print_newline() void {
+    std.debug.print("\n", .{});
+}
+
+pub fn print(comptime fmt: []const u8) void {
+    std.debug.print(fmt, .{});
+}
+
+pub fn printf(comptime fmt: []const u8, args: anytype) void {
+    std.debug.print(fmt, args);
+}
+
+pub fn println(comptime fmt: []const u8) void {
+    std.debug.print(fmt, .{});
+    print_newline();
+}
+
+pub fn printfln(comptime fmt: []const u8, args: anytype) void {
+    std.debug.print(fmt, args);
+    print_newline();
+}

@@ -1,283 +1,11 @@
 const std = @import("std");
-const util = @import("util.zig");
+const math = std.math;
+const vec = @import("vec.zig");
 const logger = @import("logger.zig");
-
-// NOTE: All vectors, 2, 3, 4 merged into 1 type, because it's easy to share operations between them
-// TODO: test between Self and *Self
-pub fn Vec(comptime LEN: u32, comptime T: type) type {
-    return struct {
-        v: @Vector(LEN, T) = undefined,
-
-        const Self = @This();
-        pub const len = LEN;
-        pub const zero_vec: Self = .{ .v = @splat(0) };
-        pub const unit_vec: Self = .{ .v = @splat(1) };
-
-        pub fn init_from_slice(data: *const [LEN]f32) Self {
-            var res: Self = .{};
-            for (data, 0..LEN) |val, i| {
-                res.v[i] = val;
-            }
-            return res;
-        }
-
-        pub fn init_from_vec(input_v: @Vector(LEN, f32)) Self {
-            return .{ .v = input_v };
-        }
-
-        pub fn init_dupl(val: f32) Self {
-            return Self{ .v = @splat(val) };
-        }
-
-        pub fn init_zero() Self {
-            return zero_vec;
-        }
-
-        pub fn init_one() Self {
-            return unit_vec;
-        }
-
-        pub fn set_from_slice(self: *Self, input: *const [LEN]f32) void {
-            for (0..LEN) |i| {
-                self.v[i] = input[i];
-            }
-        }
-
-        pub fn set_from_vec(self: *Self, comptime INPUT_LEN: u32, input_vec: Vec(INPUT_LEN, f32)) void {
-            const min_len = comptime @min(LEN, INPUT_LEN);
-            for (0..min_len) |i| {
-                self.v[i] = input_vec.v[i];
-            }
-        }
-
-        pub inline fn x(self: Self) f32 {
-            return self.v[0];
-        }
-
-        pub inline fn y(self: Self) f32 {
-            return self.v[1];
-        }
-
-        pub inline fn z(self: Self) f32 {
-            return self.v[2];
-        }
-
-        pub fn cross(lhs: Self, rhs: Self) Self {
-            if (LEN == 3) {
-                const lx, const ly, const lz = lhs.v;
-                const rx, const ry, const rz = rhs.v;
-                return .{ ly * rz - lz * ry, lx * rz - lz * rx, lx * ry - ly * rx };
-            }
-            unreachable;
-        }
-
-        pub fn dot(lhs: Self, rhs: Self) f32 {
-            return @reduce(.Add, lhs.v * rhs.v);
-        }
-
-        pub fn mul(lhs: Self, rhs: Self) Self {
-            return Self.init_from_vec(lhs.v * rhs.v);
-        }
-
-        pub fn mul_inplace(lhs: *Self, rhs: Self) void {
-            lhs.v *= rhs.v;
-        }
-
-        pub fn reciprocal(self: Self) Self {
-            var res: Vec3 = .{};
-            for (0..LEN) |i| {
-                res.v[i] = 1 / self.v[i];
-            }
-            return res;
-        }
-
-        pub fn reciprocal_inplace(self: *Self) void {
-            for (0..LEN) |i| {
-                self.v[i] = 1 / self.v[i];
-            }
-        }
-
-        pub fn normalized(self: Self) Self {
-            var res: Self = self;
-            res.negate_inplace();
-            return res;
-        }
-
-        pub fn normalize_inplace(self: *Self) void {
-            const mag = self.magnitude();
-            self.v *= 1 / mag;
-        }
-
-        pub inline fn magnitude(self: Self) f32 {
-            return @sqrt(self.magnitude_squared());
-        }
-
-        pub inline fn magnitude_squared(self: Self) f32 {
-            return self.dot(self);
-        }
-
-        pub fn distance(lhs: Self, rhs: Self) Self {
-            return rhs.v - lhs.v;
-        }
-
-        pub fn negated(self: Self) Self {
-            var res: Self = self;
-            res.negate_inplace();
-            return res;
-        }
-
-        pub inline fn negate_inplace(self: *Self) void {
-            self.v *= @as(@Vector(LEN, f32), @splat(-1.0));
-        }
-
-        pub fn cmp(lhs: Self, rhs: Self) bool {
-            const cmp_res = lhs.v == rhs.v;
-            for (0..LEN) |i| {
-                if (!cmp_res[i]) {
-                    return false;
-                }
-            }
-            return true;
-        }
-
-        pub fn print(self: Self) void {
-            logger.log_debug(.INFO, "{}", .{self.v});
-        }
-    };
-}
-
-pub fn vec4_to_vec3(v: Vec4) Vec3 {
-    return Vec3.init_from_slice(&.{ v.v[0], v.v[1], v.v[2] });
-}
-
-pub fn vec4_to_vec2(v: Vec4) Vec2 {
-    return Vec2.init_from_slice(&.{ v.v[0], v.v[1] });
-}
-
-pub fn vec3_to_vec4(v: Vec3) Vec4 {
-    return Vec4.init_from_slice(&.{ v.v[0], v.v[1], v.v[2], 1.0 });
-}
-
-pub fn vec3_to_vec2(v: Vec3) Vec2 {
-    return Vec2.init_from_slice(&.{ v.v[0], v.v[1] });
-}
-
-pub const Vec2 = Vec(2, f32);
-pub const Vec3 = Vec(3, f32);
-pub const Vec4 = Vec(4, f32);
-
-// Mat2x2 -----------------------------------------------------------------------------------
-pub const Matrix2x2 = struct {
-    const ROWS = 2;
-    const COLS = 2;
-    const ITEMS = ROWS * COLS;
-    const Self = @This();
-    const zero = std.mem.zeroes(Self);
-
-    m: [ITEMS]f32,
-
-    pub fn init_from_slice(init_slice: *const [ITEMS]f32) Self {
-        var res: Self = undefined;
-        for (0..ROWS) |y| {
-            for (0..COLS) |x| {
-                res.set_at(init_slice[y * COLS + x], y, x);
-            }
-        }
-        return res;
-    }
-
-    pub fn init_from_vec(input_vec: *const @Vector(ITEMS, f32)) Self {
-        var res: Self = .zero;
-        for (0..ROWS) |y| {
-            for (0..COLS) |x| {
-                res.set_at(input_vec[y * COLS + x], y, x);
-            }
-        }
-        return res;
-    }
-
-    pub fn init_identity() Self {
-        var res: Self = undefined;
-        res.identity_inplace();
-        return res;
-    }
-
-    pub fn identity_inplace(self: *Self) void {
-        self.* = .zero;
-        self.set_at(1.0, 0, 0);
-        self.set_at(1.0, 1, 1);
-    }
-
-    pub fn determinant(self: Self) f32 {
-        return (self.m[0] * self.m[3]) - (self.m[2] * self.m[1]);
-    }
-
-    pub inline fn set_row(self: *Self, input_row: Vec2, index: usize) void {
-        self.m[index] = input_row;
-    }
-
-    pub inline fn increment_row(self: *Self, input_row: Vec2, index: usize) void {
-        self.m[index].v += input_row.v;
-    }
-
-    pub inline fn set_col(self: *Self, input_col: Vec2, index: usize) void {
-        for (0..ROWS) |i| {
-            self.set_at(input_col.v[i], i, index);
-        }
-    }
-
-    pub inline fn increment_col(self: *Self, input_col: Vec2, index: usize) void {
-        for (0..ROWS) |i| {
-            self.increment_at(input_col.v[i], i, index);
-        }
-    }
-
-    pub inline fn get_row(self: *const Self, index: usize) Vec2 {
-        return self.m[index];
-    }
-
-    pub fn get_col(self: *const Self, index: usize) Vec2 {
-        var col: Vec2 = .{};
-        for (0..ROWS) |i| {
-            col.v[i] = self.get_at(i, index);
-        }
-        return col;
-    }
-
-    pub inline fn set_at(self: *Self, val: f32, row: usize, col: usize) void {
-        self.m[row].v[col] = val;
-    }
-
-    pub inline fn increment_at(self: *Self, val: f32, row: usize, col: usize) void {
-        self.m[row].v[col] += val;
-    }
-
-    pub inline fn get_at(self: *const Self, row: usize, col: usize) f32 {
-        return self.m[row].v[col];
-    }
-
-    pub inline fn get_at_ptr(self: *Self, row: usize, col: usize) *f32 {
-        return &self.m[row].v[col];
-    }
-
-    pub inline fn get_at_ptr_as_const(self: *const Self, row: usize, col: usize) *const f32 {
-        return &self.m[row].v[col];
-    }
-
-    pub inline fn as_single_vec(self: *Self) *@Vector(ITEMS, f32) {
-        return @ptrCast(@alignCast(&self.m));
-    }
-
-    pub inline fn as_single_vec_as_const(self: *const Self) *const @Vector(ITEMS, f32) {
-        return @ptrCast(@alignCast(&self.m));
-    }
-
-    pub fn print(self: Self) void {
-        for (0..ROWS) |y| {
-            self.get_row(y).print();
-        }
-    }
-};
+const Vec = vec.Vec;
+const Vec2 = vec.Vec2;
+const Vec3 = vec.Vec3;
+const Vec4 = vec.Vec4;
 
 // Mat3x3 -----------------------------------------------------------------------------------
 // Laplace expansion theorem (inverse): https://www.geometrictools.com/Documentation/LaplaceExpansionTheorem.pdf
@@ -286,9 +14,10 @@ pub const Matrix3x3 = struct {
     const COLS = 3;
     const ITEMS = ROWS * COLS;
     const Self = @This();
+    const VecT = Vec(ROWS, f32);
     const zero = std.mem.zeroes(Self);
 
-    m: [ROWS]Vec3,
+    data: [ROWS]Vec3,
 
     pub fn init_identity() Self {
         var res: Self = undefined;
@@ -300,7 +29,7 @@ pub const Matrix3x3 = struct {
         var res: Self = undefined;
         for (0..ROWS) |y| {
             for (0..COLS) |x| {
-                res.m[y].v[x] = init_slice[y * COLS + x];
+                res.data[y].data[x] = init_slice[y * COLS + x];
             }
         }
         return res;
@@ -314,59 +43,37 @@ pub const Matrix3x3 = struct {
         return res;
     }
 
-    pub fn init_from_mat2x2(mat2: *const Matrix2x2) Self {
-        var res: Self = undefined;
-        for (0..Matrix2x2.ROWS) |y| {
-            for (0..Matrix2x2.COLS) |x| {
-                res.set_at(mat2.get_at(y, x), y, x);
-            }
-        }
-        res.set_col(.init_from_slice(&.{ 0, 0, 1 }), 2);
-        res.set_row(.init_from_slice(&.{ 0, 0, 1 }), 2);
-        return res;
-    }
-
     pub fn identity_inplace(self: *Self) void {
         self.* = .zero;
-        self.m[0].v[0] = 1.0;
-        self.m[1].v[1] = 1.0;
-        self.m[2].v[2] = 1.0;
+        self.data[0].data[0] = 1.0;
+        self.data[1].data[1] = 1.0;
+        self.data[2].data[2] = 1.0;
     }
 
     pub fn mul(lhs: Self, rhs: Self) Self {
-        var res: Self = .init_identity();
-
-        for (0..ROWS) |y| {
-            const lv = lhs.get_row(y);
-            var res_row: Vec3 = undefined;
-            for (0..COLS) |x| {
-                const rv: Vec3 = rhs.get_col(x);
-                res_row.v[x] = lv.dot(rv);
-            }
-            res.set_row(res_row, y);
-        }
-
+        var res: Self = lhs;
+        res.mul_inplace(rhs);
         return res;
     }
 
     pub fn mul_inplace(self: *Self, rhs: Self) void {
         for (0..ROWS) |y| {
-            const lv = self.m[y];
-            var res_row: Vec4 = undefined;
+            const lv = self.get_row(y);
+            var res_row: VecT = undefined;
             for (0..COLS) |x| {
-                const rv: Vec4 = rhs.get_col(x);
-                res_row.v[x] = lv.dot(rv);
+                const rv: VecT = rhs.get_col(x);
+                res_row.data[x] = lv.dot(rv);
             }
             self.set_row(res_row, y);
         }
     }
 
-    pub fn mul_vec3(lhs: Self, rhs: Vec3) Vec3 {
-        var res: Vec3 = undefined;
+    pub fn mul_vec3(lhs: Self, rhs: VecT) VecT {
+        var res: VecT = undefined;
 
         for (0..ROWS) |y| {
             const lhs_row = lhs.get_row(y);
-            res.v[y] = lhs_row.dot(rhs);
+            res.data[y] = lhs_row.dot(rhs);
         }
 
         return res;
@@ -394,13 +101,13 @@ pub const Matrix3x3 = struct {
 
         // check if determinant is 0
         const det = (s.at(0, 0) * adj.at(0, 0)) + (s.at(0, 1) * adj.at(1, 0)) + (s.at(0, 2) * adj.at(2, 0));
-        if (@abs(det) <= std.math.floatEps(f32)) {
+        if (@abs(det) <= math.floatEps(f32)) {
             s.identity_inplace(); // cannot inverse, make it identity matrix
             return;
         }
 
         // divide by the determinant
-        const inv_det_v: Vec3 = .init_dupl(1.0 / det);
+        const inv_det_v: VecT = .init_dupl(1.0 / det);
 
         // multiply 'adj' matrix memberwise with inv_det_v and set to 's'
         s.set_row(adj.get_row_ptr(0).mul(inv_det_v), 0);
@@ -420,99 +127,88 @@ pub const Matrix3x3 = struct {
         std.mem.swap(f32, self.get_at_ptr(1, 2), self.get_at_ptr(2, 1));
     }
 
-    pub inline fn set_row(self: *Self, input_row: Vec3, index: usize) void {
-        self.m[index] = input_row;
+    inline fn set_row(self: *Self, input_row: VecT, index: usize) void {
+        self.data[index] = input_row;
     }
 
-    pub inline fn increment_row(self: *Self, input_row: Vec3, index: usize) void {
-        self.m[index].v += input_row.v;
-    }
-
-    pub inline fn set_col(self: *Self, input_col: Vec3, index: usize) void {
+    inline fn set_col(self: *Self, input_col: VecT, index: usize) void {
         for (0..ROWS) |i| {
-            self.set_at(input_col.v[i], i, index);
+            self.set_at(input_col.data[i], i, index);
         }
     }
 
-    pub inline fn increment_col(self: *Self, input_col: Vec3, index: usize) void {
+    inline fn get_row(self: *const Self, index: usize) VecT {
+        return self.data[index];
+    }
+
+    inline fn get_row_ptr(self: *Self, index: usize) *VecT {
+        return &self.data[index];
+    }
+
+    inline fn get_row_ptr_as_const(self: *const Self, index: usize) *const VecT {
+        return &self.data[index];
+    }
+
+    fn get_col(self: *const Self, index: usize) VecT {
+        var col: VecT = .{};
         for (0..ROWS) |i| {
-            self.increment_at(input_col.v[i], i, index);
-        }
-    }
-
-    pub inline fn get_row(self: *const Self, index: usize) Vec3 {
-        return self.m[index];
-    }
-
-    pub inline fn get_row_ptr(self: *Self, index: usize) *Vec3 {
-        return &self.m[index];
-    }
-
-    pub inline fn get_row_ptr_as_const(self: *const Self, index: usize) *const Vec3 {
-        return &self.m[index];
-    }
-
-    pub fn get_col(self: *const Self, index: usize) Vec3 {
-        var col: Vec3 = .{};
-        for (0..ROWS) |i| {
-            col.v[i] = self.get_at(i, index);
+            col.data[i] = self.get_at(i, index);
         }
         return col;
     }
 
-    pub fn get_translation_vec(self: *const Self) Vec3 {
-        return self.get_col(3);
-    }
-
-    pub fn get_scaling_vec(self: *const Self) Vec3 {
-        var scale_vec: Vec3 = undefined;
-        scale_vec.v[0] = self.get_at(0, 0);
-        scale_vec.v[1] = self.get_at(1, 1);
-        scale_vec.v[2] = self.get_at(2, 2);
+    pub fn get_scaling_vec(self: *const Self) VecT {
+        var scale_vec: VecT = undefined;
+        for (0..3) |i| {
+            scale_vec.data[i] = self.get_at(i, i);
+        }
         return scale_vec;
     }
 
-    pub fn set_scaling_vec(self: *Self, scale_vec: Vec3) void {
-        self.set_at(scale_vec.v[0], 0, 0);
-        self.set_at(scale_vec.v[1], 1, 1);
-        self.set_at(scale_vec.v[2], 2, 2);
+    pub fn set_scaling_vec(self: *Self, input_v: VecT) void {
+        for (0..3) |i| {
+            self.set_at(input_v.data[i], i, i);
+        }
     }
 
-    pub inline fn set_at(self: *Self, val: f32, row: usize, col: usize) void {
-        self.m[row].v[col] = val;
+    inline fn set_at(self: *Self, val: f32, row: usize, col: usize) void {
+        self.data[row].data[col] = val;
     }
 
-    pub inline fn increment_at(self: *Self, val: f32, row: usize, col: usize) void {
-        self.m[row].v[col] += val;
-    }
-
-    pub inline fn get_at(self: *const Self, row: usize, col: usize) f32 {
-        return self.m[row].v[col];
+    inline fn get_at(self: *const Self, row: usize, col: usize) f32 {
+        return self.data[row].data[col];
     }
 
     // shorter alias for get_at
-    pub inline fn at(self: *const Self, row: usize, col: usize) f32 {
-        return self.m[row].v[col];
+    inline fn at(self: *const Self, row: usize, col: usize) f32 {
+        return self.data[row].data[col];
     }
 
-    pub inline fn get_at_ptr(self: *Self, row: usize, col: usize) *f32 {
-        return &self.m[row].v[col];
+    inline fn get_at_ptr(self: *Self, row: usize, col: usize) *f32 {
+        return &self.data[row].data[col];
     }
 
-    pub inline fn get_at_ptr_as_const(self: *const Self, row: usize, col: usize) *const f32 {
-        return &self.m[row].v[col];
-    }
-
-    pub inline fn as_single_vec(self: *Self) *@Vector(ITEMS, f32) {
-        return @ptrCast(@alignCast(&self.m));
-    }
-
-    pub inline fn as_single_vec_as_const(self: *const Self) *const @Vector(ITEMS, f32) {
-        return @ptrCast(@alignCast(&self.m));
+    inline fn get_at_ptr_as_const(self: *const Self, row: usize, col: usize) *const f32 {
+        return &self.data[row].data[col];
     }
 
     pub inline fn as_single_slice(self: *Self) []f32 {
-        return @ptrCast(@alignCast(&self.m));
+        return @ptrCast(@alignCast(&self.data));
+    }
+
+    pub inline fn as_single_slice_as_const(self: Self) []const f32 {
+        return @ptrCast(@alignCast(&self.data));
+    }
+
+    pub fn eql(lhs: Self, rhs: Self) bool {
+        for (0..ROWS) |y| {
+            const l_row = lhs.get_row(y);
+            const r_row = rhs.get_row(y);
+            if (!l_row.eql(r_row)) {
+                return false;
+            }
+        }
+        return true;
     }
 
     pub fn print(self: Self) void {
@@ -529,16 +225,17 @@ pub const Axis = enum { X, Y, Z };
 // NOTE: Matrix-vector multiplication scheme will be: Mat4x4 * Vec4
 // NOTE: coordinate systems in Vulkan https://www.kdab.com/projection-matrices-with-vulkan-part-1/
 
-// TODO: mat * vec multiplications
-// TEST: test different representations ([16]f32, [4]@Vector(4, f32), @Vector(16, f32))
+// TODO:
+// 1) rotation around arbitrary axis
 pub const Matrix4x4 = struct {
     const ROWS = 4;
     const COLS = 4;
     const ITEMS = ROWS * COLS;
     const Self = @This();
+    const VecT = Vec(ROWS, f32);
     const zero = std.mem.zeroes(Self);
 
-    m: [ROWS]Vec4,
+    data: [ROWS]VecT,
 
     pub fn init_from_slice(input_slice: *const [ITEMS]f32) Self {
         var res: Self = .zero;
@@ -562,21 +259,7 @@ pub const Matrix4x4 = struct {
         return res;
     }
 
-    pub fn init_from_mat2x2(mat2: *const Matrix2x2) Self {
-        var res: Self = undefined;
-        for (0..Matrix2x2.ROWS) |y| {
-            for (0..Matrix2x2.COLS) |x| {
-                res.set_at(mat2.get_at(y, x), y, x);
-            }
-        }
-        res.set_col(.init_from_slice(&.{ 0, 0, 1, 0 }), 2);
-        res.set_col(.init_from_slice(&.{ 0, 0, 0, 1 }), 3);
-        res.set_row(.init_from_slice(&.{ 0, 0, 1, 0 }), 2);
-        res.set_row(.init_from_slice(&.{ 0, 0, 0, 1 }), 3);
-        return res;
-    }
-
-    pub fn init_from_rows(input_rows: *const [ROWS]Vec4) Self {
+    pub fn init_from_rows(input_rows: *const [ROWS]VecT) Self {
         var res: Self = .zero;
         for (0..ROWS) |y| {
             res.set_row(.init_from_vec(input_rows[y]), y);
@@ -622,127 +305,134 @@ pub const Matrix4x4 = struct {
 
     pub fn init_translation(translation_vec: Vec3) Self {
         var res: Self = .init_identity();
-        res.set_col(vec3_to_vec4(translation_vec), 3);
+        res.set_col_from_vec3(translation_vec, 3);
         return res;
     }
 
-    pub fn set_translate_inplace(self: *Self, translation_vec: Vec3) void {
-        self.set_col_from_vec3(translation_vec, 3);
-    }
-
-    pub fn increment_translate_inplace(self: *Self, translation_vec: Vec3) void {
-        self.increment_col(vec3_to_vec4(translation_vec), 3);
+    pub fn translate_inplace(self: *Self, translation_vec: Vec3) void {
+        const rsh: Matrix4x4 = .init_translation(translation_vec);
+        self.mul(rsh);
     }
 
     pub fn init_scaling(scaling_vec: Vec3) Self {
         var res: Self = .init_identity();
         for (0..3) |i| {
-            res.set_at(scaling_vec.v[i], i, i);
+            res.set_at(scaling_vec.data[i], i, i);
         }
         return res;
     }
 
-    pub fn set_scale_inplace(self: *Self, scaling_vec: Vec3) void {
-        for (0..3) |i| {
-            self.set_at(scaling_vec.v[i], i, i);
-        }
-    }
-
-    pub fn increment_scale_inplace(self: *Self, scaling_vec: Vec3) void {
-        for (0..3) |i| {
-            self.increment_at(scaling_vec.v[i], i, i);
-        }
+    pub fn scale_inplace(self: *Self, scaling_vec: Vec3) void {
+        const rhs: Self = .init_scaling(scaling_vec);
+        self.mul(rhs);
     }
 
     pub fn init_rotation(rotate_deg: f32, axis: Axis) Self {
         var res: Self = .init_identity();
-        const sin = @sin(std.math.rad_per_deg * rotate_deg);
-        const cos = @cos(std.math.rad_per_deg * rotate_deg);
-
-        switch (axis) {
-            .X => {
-                res.set_at(cos, 1, 1);
-                res.set_at(-sin, 1, 2);
-                res.set_at(sin, 2, 1);
-                res.set_at(cos, 2, 2);
-            },
-            .Y => {
-                res.set_at(cos, 0, 0);
-                res.set_at(sin, 0, 2);
-                res.set_at(-sin, 2, 0);
-                res.set_at(cos, 2, 2);
-            },
-            .Z => {
-                res.set_at(cos, 0, 0);
-                res.set_at(-sin, 0, 1);
-                res.set_at(sin, 1, 0);
-                res.set_at(cos, 1, 1);
-            },
-        }
-
+        res.rotate_inplace(rotate_deg, axis);
         return res;
     }
 
     pub fn rotate_inplace(self: *Self, rotate_deg: f32, axis: Axis) void {
-        const sin = @sin(std.math.rad_per_deg * rotate_deg);
-        const cos = @cos(std.math.rad_per_deg * rotate_deg);
+        const sin = @sin(math.rad_per_deg * rotate_deg);
+        const cos = @cos(math.rad_per_deg * rotate_deg);
 
         switch (axis) {
             .X => {
-                self.increment_at(cos, 1, 1);
-                self.increment_at(-sin, 1, 2);
-                self.increment_at(sin, 2, 1);
-                self.increment_at(cos, 2, 2);
+                self.set_at(cos, 1, 1);
+                self.set_at(-sin, 1, 2);
+                self.set_at(sin, 2, 1);
+                self.set_at(cos, 2, 2);
             },
             .Y => {
-                self.increment_at(cos, 0, 0);
-                self.increment_at(sin, 0, 2);
-                self.increment_at(-sin, 2, 0);
-                self.increment_at(cos, 2, 2);
+                self.set_at(cos, 0, 0);
+                self.set_at(sin, 0, 2);
+                self.set_at(-sin, 2, 0);
+                self.set_at(cos, 2, 2);
             },
             .Z => {
-                self.increment_at(cos, 0, 0);
-                self.increment_at(-sin, 0, 1);
-                self.increment_at(sin, 1, 0);
-                self.increment_at(cos, 1, 1);
+                self.set_at(cos, 0, 0);
+                self.set_at(-sin, 0, 1);
+                self.set_at(sin, 1, 0);
+                self.set_at(cos, 1, 1);
             },
         }
     }
 
+    pub fn init_rotation_arbitrary_axis(angle_deg: f32, axis: Vec3) Self {
+        const angle_rad = math.degreesToRadians(angle_deg);
+        const cos = @cos(angle_rad);
+        const sin = @sin(angle_rad);
+        const t = 1.0 - cos;
+        const x = axis.x();
+        const y = axis.y();
+        const z = axis.z();
+
+        var res: Matrix4x4 = .init_identity();
+        const row_0: Vec4 = .init(
+            t * x * x + cos,
+            t * x * y - sin * z,
+            t * x * z + sin * y,
+            0,
+        );
+        res.set_row(row_0, 0);
+
+        const row_1: Vec4 = .init(
+            t * x * y + sin * z,
+            t * y * y + cos,
+            t * y * z - sin * x,
+            0,
+        );
+        res.set_row(row_1, 1);
+
+        const row_2: Vec4 = .init(
+            t * x * z - sin * y,
+            t * y * z + sin * x,
+            t * z * z + cos,
+            0,
+        );
+        res.set_row(row_2, 2);
+
+        return res;
+    }
+
+    pub fn init_rotation_3d(rotate_x_deg: f32, rotate_y_deg: f32, rotate_z_deg: f32) Self {
+        var res: Matrix4x4 = .init_identity();
+        res.rotate_3d_inplace(rotate_x_deg, rotate_y_deg, rotate_z_deg);
+        return res;
+    }
+
+    pub fn rotate_3d_inplace(self: *Self, rotate_x_deg: f32, rotate_y_deg: f32, rotate_z_deg: f32) void {
+        const m_x: Matrix4x4 = .init_rotation(rotate_x_deg, .X);
+        const m_y: Matrix4x4 = .init_rotation(rotate_y_deg, .Y);
+        const m_z: Matrix4x4 = .init_rotation(rotate_z_deg, .Z);
+        self.mul_many_inplace(&.{ m_x, m_y, m_z });
+    }
+
     pub fn mul(lhs: Self, rhs: Self) Self {
-        var res: Self = .init_identity();
-
-        for (0..ROWS) |y| {
-            const lv = lhs.m[y];
-            var res_row: Vec4 = undefined;
-            for (0..COLS) |x| {
-                const rv: Vec4 = rhs.get_col(x);
-                res_row.v[x] = lv.dot(rv);
-            }
-            res.set_row(res_row, y);
-        }
-
+        var res: Self = lhs;
+        res.mul_inplace(rhs);
         return res;
     }
 
     pub fn mul_inplace(self: *Self, rhs: Self) void {
         for (0..ROWS) |y| {
-            const lv = self.m[y];
-            var res_row: Vec4 = undefined;
+            const lv = self.get_row(y);
+            var res_row: VecT = undefined;
             for (0..COLS) |x| {
-                const rv: Vec4 = rhs.get_col(x);
-                res_row.v[x] = lv.dot(rv);
+                const rv: VecT = rhs.get_col(x);
+                res_row.data[x] = lv.dot(rv);
             }
             self.set_row(res_row, y);
         }
     }
 
-    pub fn mul_vec4(lhs: Self, rhs: Vec4) Vec4 {
-        var res: Vec4 = undefined;
+    pub fn mul_vec4(lhs: Self, rhs: VecT) VecT {
+        var res: VecT = undefined;
 
         for (0..ROWS) |y| {
             const lhs_row = lhs.get_row(y);
-            res.v[y] = lhs_row.dot(rhs);
+            res.data[y] = lhs_row.dot(rhs);
         }
 
         return res;
@@ -752,14 +442,14 @@ pub const Matrix4x4 = struct {
         var res: Self = .init_identity();
 
         for (0..ROWS) |y| {
-            var row: Vec4 = first.get_row(y);
-            var col: Vec4 = undefined;
-            var between_res: Vec4 = undefined;
+            var row: VecT = first.get_row(y);
+            var col: VecT = undefined;
+            var between_res: VecT = undefined;
 
             for (inputs) |input_mat| {
                 for (0..COLS) |x| {
                     col = input_mat.get_col(x);
-                    between_res.v[x] = row.dot(col);
+                    between_res.data[x] = row.dot(col);
                 }
                 row = between_res;
             }
@@ -772,14 +462,14 @@ pub const Matrix4x4 = struct {
 
     pub fn mul_many_inplace(self: *Self, inputs: []const Self) void {
         for (0..ROWS) |y| {
-            var row: Vec4 = self.get_row(y);
-            var col: Vec4 = undefined;
-            var between_res: Vec4 = undefined;
+            var row: VecT = self.get_row(y);
+            var col: VecT = undefined;
+            var between_res: VecT = undefined;
 
             for (inputs) |input_mat| {
                 for (0..COLS) |x| {
                     col = input_mat.get_col(x);
-                    between_res.v[x] = row.dot(col);
+                    between_res.data[x] = row.dot(col);
                 }
                 row = between_res;
             }
@@ -825,8 +515,8 @@ pub const Matrix4x4 = struct {
         return res.is_identity();
     }
 
-    inline fn is_affine(s: Self) bool {
-        const affine_row: Vec4 = .init_from_slice(&.{ 0, 0, 0, 1 });
+    pub inline fn is_affine(s: Self) bool {
+        const affine_row: VecT = .init_from_slice(&.{ 0, 0, 0, 1 });
         const last_row_v = s.get_row(3);
         return last_row_v.cmp(affine_row);
     }
@@ -875,9 +565,9 @@ pub const Matrix4x4 = struct {
         // m[13] = -(m[1] * x + m[5] * y + m[9] * z);
         // m[14] = -(m[2] * x + m[6] * y + m[10]* z);
         const sub_mat: Matrix3x3 = .init_from_mat4x4(self);
-        var translate_col = sub_mat.mul_vec3(self.get_translation_col());
+        var translate_col = sub_mat.mul_vec3(self.get_translation_vec());
         translate_col.negate_inplace();
-        self.set_translation_col(translate_col);
+        self.set_translation_vec(translate_col);
     }
 
     // NOTE: faster than inverse_general, but slower than inverse_euclidean
@@ -909,9 +599,9 @@ pub const Matrix4x4 = struct {
         self.set_row_from_vec3(sub_mat.get_row(2), 2);
 
         // -R^-1 * T
-        var translate_col = sub_mat.mul_vec3(self.get_translation_col());
-        translate_col.negate_inplace();
-        self.set_translation_col(translate_col);
+        var translate_vec = sub_mat.mul_vec3(self.get_translation_vec());
+        translate_vec.negate_inplace();
+        self.set_translation_vec(translate_vec);
     }
 
     // NOTE: this is slowest version of invert,
@@ -932,7 +622,7 @@ pub const Matrix4x4 = struct {
 
         // get determinant
         const det: f32 = m[0] * cofactor0 - m[1] * cofactor1 + m[2] * cofactor2 - m[3] * cofactor3;
-        if (@abs(det) <= std.math.floatEps(f32)) {
+        if (@abs(det) <= math.floatEps(f32)) {
             self.identity_inplace();
             return;
         }
@@ -979,7 +669,7 @@ pub const Matrix4x4 = struct {
 
     // NOTE: fast video https://www.youtube.com/watch?v=NEOqegcMw-Q
     pub fn determinant(self: Self) f32 {
-        const m = self.as_single_vec();
+        const m = self.as_single_slice_as_const();
         return m[0] * cofactor(m[5], m[6], m[7], m[9], m[10], m[11], m[13], m[14], m[15]) -
             m[1] * cofactor(m[4], m[6], m[7], m[8], m[10], m[11], m[12], m[14], m[15]) +
             m[2] * cofactor(m[4], m[5], m[7], m[8], m[9], m[11], m[12], m[13], m[15]) -
@@ -1037,64 +727,91 @@ pub const Matrix4x4 = struct {
         return res;
     }
 
-    pub inline fn set_row(self: *Self, input_row: Vec4, index: usize) void {
-        self.m[index] = input_row;
+    pub fn init_orthographic(t: f32, b: f32, l: f32, r: f32, n: f32, f: f32) Self {
+        var res: Self = .init_identity();
+        res.set_at(2.0 / (r - l), 0, 0);
+        res.set_at(-((r + l) / (r - l)), 0, 3);
+        res.set_at(2.0 / (b - t), 1, 1);
+        res.set_at(-((b + t) / (b - t)), 1, 3);
+        res.set_at(-2 / (f - n), 2, 2);
+        res.set_at(-((f + n) / (f - n)), 2, 3);
+        return res;
     }
 
-    pub inline fn set_row_from_vec3(self: *Self, input_row: Vec3, index: usize) void {
-        self.m[index].set_from_vec(3, input_row);
+    inline fn set_row(self: *Self, input_row: VecT, index: usize) void {
+        self.data[index] = input_row;
     }
 
-    pub inline fn set_row_from_vec2(self: *Self, input_row: Vec2, index: usize) void {
-        self.m[index].set_from_vec(2, input_row);
+    inline fn set_row_from_vec3(self: *Self, input_row: Vec3, index: usize) void {
+        self.data[index].set_from_vec(3, input_row);
     }
 
-    pub inline fn increment_row(self: *Self, input_row: Vec4, index: usize) void {
-        self.m[index].v += input_row.v;
-    }
-
-    pub inline fn set_col(self: *Self, input_col: Vec4, index: usize) void {
+    inline fn set_col(self: *Self, input_col: VecT, index: usize) void {
         for (0..ROWS) |i| {
-            self.set_at(input_col.v[i], i, index);
+            self.set_at(input_col.data[i], i, index);
         }
     }
 
-    pub inline fn set_col_from_vec3(self: *Self, input_col: Vec3, index: usize) void {
+    inline fn set_col_from_vec3(self: *Self, input_col: Vec3, index: usize) void {
         for (0..3) |i| {
-            self.set_at(input_col.v[i], i, index);
+            self.set_at(input_col.data[i], i, index);
         }
     }
 
-    pub inline fn set_translation_col(self: *Self, input_col: Vec3) void {
+    inline fn set_translation_vec(self: *Self, input_vec: Vec3) void {
+        self.set_col_from_vec3(input_vec, 3);
+    }
+
+    inline fn set_scaling_vec(self: *Self, input_col: Vec3) void {
         for (0..3) |i| {
-            self.set_at(input_col.v[i], i, 3);
+            self.set_at(input_col.data[i], i, i);
         }
     }
 
-    pub inline fn increment_col(self: *Self, input_col: Vec4, index: usize) void {
-        for (0..ROWS) |i| {
-            self.increment_at(input_col.v[i], i, index);
-        }
+    inline fn set_at(self: *Self, val: f32, row: usize, col: usize) void {
+        self.data[row].data[col] = val;
     }
 
-    pub inline fn increment_col_from_vec3(self: *Self, input_col: Vec3, index: usize) void {
+    pub fn get_scaling_vec(self: *const Self) Vec3 {
+        var scale_vec: Vec3 = undefined;
         for (0..3) |i| {
-            self.increment_at(input_col.v[i], i, index);
+            scale_vec.data[i] = self.get_at(i, i);
         }
+        return scale_vec;
     }
 
-    pub inline fn get_row(self: *const Self, index: usize) Vec4 {
-        return self.m[index];
+    pub fn get_translation_vec(self: *const Self) Vec3 {
+        return self.get_col_as_vec3(3);
+    }
+
+    pub inline fn get_x_vec(self: Self) Vec3 {
+        return self.get_row(0);
+    }
+
+    pub inline fn get_y_vec(self: Self) Vec3 {
+        return self.get_row(1);
+    }
+
+    pub inline fn get_z_vec(self: Self) Vec3 {
+        return self.get_row(2);
+    }
+
+    pub inline fn get_projection_vec(self: Self) Vec3 {
+        return self.get_row(3);
+    }
+
+    pub inline fn get_row(self: *const Self, index: usize) VecT {
+        return self.data[index];
     }
 
     pub inline fn get_row_as_vec3(self: *const Self, index: usize) Vec3 {
-        return vec4_to_vec3(self.m[index]);
+        return self.data[index].to_vec3();
     }
 
-    pub fn get_col(self: *const Self, index: usize) Vec4 {
-        var col: Vec4 = .{};
+    pub fn get_col(self: *const Self, index: usize) VecT {
+        var col: VecT = .{};
         for (0..ROWS) |i| {
-            col.v[i] = self.m[i].v[index];
+            col.data[i] = self.data[i].data[index];
         }
         return col;
     }
@@ -1102,69 +819,41 @@ pub const Matrix4x4 = struct {
     pub fn get_col_as_vec3(self: *const Self, index: usize) Vec3 {
         var col: Vec3 = undefined;
         for (0..3) |i| {
-            col.v[i] = self.get_at(i, index);
+            col.data[i] = self.get_at(i, index);
         }
         return col;
     }
 
-    pub fn get_scaling_vec(self: *const Self) Vec3 {
-        var scale_vec: Vec3 = undefined;
-        scale_vec.v[0] = self.get_at(0, 0);
-        scale_vec.v[1] = self.get_at(1, 1);
-        scale_vec.v[2] = self.get_at(2, 2);
-        return scale_vec;
-    }
-
-    pub fn get_translation_col(self: *const Self) Vec3 {
-        var col: Vec3 = .{};
-        for (0..3) |i| {
-            col.v[i] = self.get_at(i, 3);
-        }
-        return col;
-    }
-
-    pub inline fn set_at(self: *Self, val: f32, row: usize, col: usize) void {
-        self.m[row].v[col] = val;
-    }
-
-    pub inline fn increment_at(self: *Self, val: f32, row: usize, col: usize) void {
-        self.m[row].v[col] += val;
-    }
-
-    pub inline fn get_at(self: *const Self, row: usize, col: usize) f32 {
-        return self.m[row].v[col];
+    inline fn get_at(self: *const Self, row: usize, col: usize) f32 {
+        return self.data[row].data[col];
     }
 
     // shorter alias for get_at
-    pub inline fn at(self: *const Self, row: usize, col: usize) f32 {
-        return self.m[row].v[col];
+    inline fn at(self: *const Self, row: usize, col: usize) f32 {
+        return self.data[row].data[col];
     }
 
-    pub inline fn get_at_ptr(self: *Self, row: usize, col: usize) *f32 {
-        return &self.m[row].v[col];
+    inline fn get_at_ptr(self: *Self, row: usize, col: usize) *f32 {
+        return &self.data[row].data[col];
     }
 
-    pub inline fn get_at_ptr_as_const(self: *const Self, row: usize, col: usize) *const f32 {
-        return &self.m[row].v[col];
-    }
-
-    pub inline fn as_single_vec(self: *Self) *@Vector(ITEMS, f32) {
-        return @ptrCast(@alignCast(&self.m));
-    }
-
-    pub inline fn as_single_vec_as_const(self: *const Self) *const @Vector(ITEMS, f32) {
-        return @ptrCast(@alignCast(&self.m));
+    inline fn get_at_ptr_as_const(self: *const Self, row: usize, col: usize) *const f32 {
+        return &self.data[row].data[col];
     }
 
     pub inline fn as_single_slice(self: *Self) []f32 {
-        return @ptrCast(@alignCast(&self.m));
+        return @ptrCast(@alignCast(&self.data));
     }
 
-    pub fn cmp(lhs: Self, rhs: Self) bool {
+    pub inline fn as_single_slice_as_const(self: Self) []const f32 {
+        return @ptrCast(@alignCast(&self.data));
+    }
+
+    pub fn eql(lhs: Self, rhs: Self) bool {
         for (0..ROWS) |y| {
             const l_row = lhs.get_row(y);
             const r_row = rhs.get_row(y);
-            if (!l_row.cmp(r_row)) {
+            if (!l_row.eql(r_row)) {
                 return false;
             }
         }
@@ -1178,13 +867,12 @@ pub const Matrix4x4 = struct {
     }
 };
 
-test {
+test "matrix" {
     {
         logger.println("Translation: ", .{});
-        var m: Matrix4x4 = .init_identity();
-        m.set_translate_inplace(.init_dupl(2.0));
+        var m: Matrix4x4 = .init_translation(.init_dupl(2.0));
         m.print();
-        logger.println("Transposition: ", .{});
+        logger.println("Transposition: ");
         m.transpose_inplace();
         m.print();
     }
@@ -1198,11 +886,8 @@ test {
         m.print();
     }
     {
-        logger.println("Scaling: ", .{});
-        var m: Matrix4x4 = .init_identity();
-        m.print();
-        logger.print_newline();
-        m.set_scale_inplace(.init_dupl(2.0));
+        logger.println("Scaling: ");
+        var m: Matrix4x4 = .init_scaling(.init_dupl(2.0));
         m.print();
     }
     {
@@ -1215,42 +900,57 @@ test {
         res.print();
     }
     {
-        logger.println("Projection", .{});
+        logger.println("Projection");
         const m: Matrix4x4 = .init_projection_fov(45.0, 1.2, 0.1, 100.0);
         m.print();
     }
     {
-        logger.println("Conversion m4x4 to m3x3: ", .{});
+        logger.println("Conversion m4x4 to m3x3: ");
         const m4: Matrix4x4 = .init_identity();
         const m3: Matrix3x3 = .init_from_mat4x4(&m4);
         m3.print();
     }
     {
-        logger.println("Conversion m3x3 to m4x4: ", .{});
+        logger.println("Conversion m3x3 to m4x4: ");
         const m3: Matrix3x3 = .init_identity();
         const m4: Matrix4x4 = .init_from_mat3x3(&m3);
         m4.print();
     }
     {
-        logger.println("Invert - rotation ", .{});
+        logger.println("Invert - rotation ");
         var m: Matrix4x4 = .init_rotation(45.0, .Z);
         m.print();
 
-        logger.println("after: ", .{});
+        logger.println("after: ");
 
         m.inverse_affine_inplace();
         m.print();
     }
     {
-        logger.println("Invert - scaling + translation ", .{});
+        logger.println("Invert - scaling + translation ");
         var m: Matrix4x4 = .init_scaling(.init_from_slice(&.{ 2, 2, 2 }));
         const t: Matrix4x4 = .init_translation(.init_from_slice(&.{ 4, 2, 1 }));
         m.mul_inplace(t);
         m.print();
 
-        logger.println("after: ", .{});
+        logger.println("after: ");
 
         m.inverse_affine_inplace();
         m.print();
+    }
+    {
+        logger.println("Rotate around arbitrary axis");
+        var m: Matrix4x4 = .init_rotation_arbitrary_axis(90, .right);
+        const m1: Matrix4x4 = .init_rotation(90, .X);
+
+        logger.println("arbitrary: ");
+        m.print();
+        logger.println("plain: ");
+        m1.print();
+    }
+    {
+        logger.println("determinant: ");
+        var m: Matrix4x4 = .init_scaling(.init_dupl(3));
+        logger.printfln("is: {}", .{m.determinant()});
     }
 }
